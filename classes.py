@@ -2,6 +2,7 @@ from collections import UserDict
 from datetime import datetime, timedelta
 from typing import Optional, List
 from dataclasses import dataclass
+import pickle
 
 
 @dataclass
@@ -22,7 +23,7 @@ class Name(Field):
 class Phone(Field):
     """Поле телефону з валідацією (рівно 10 цифр)."""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if len(self.value) != 10 or not self.value.isdigit():
             raise ValueError(f"Phone number '{self.value}' is not valid")
 
@@ -31,7 +32,7 @@ class Phone(Field):
 class Birthday(Field):
     """Поле дня народження у форматі DD.MM.YYYY."""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         try:
             datetime.strptime(self.value, "%d.%m.%Y").date()
         except ValueError:
@@ -47,13 +48,17 @@ class Record:
         self.birthday: Optional[Birthday] = None
 
     def add_phone(self, value: str) -> None:
-        """Додає телефон до списку."""
-        self.phones.append(Phone(value))
+        """Додає телефон до списку, якщо такого номера ще немає."""
+        if self.find_phone(value) is None:
+            self.phones.append(Phone(value))
+        else:
+            raise ValueError("Phone number already exists.")
 
     def remove_phone(self, value: str | Phone) -> None:
-        """Видаляє телефон (за рядком або об'єктом)."""
+        """Видаляє телефон (за рядком або об'єктом Phone)."""
         if isinstance(value, str):
             value = self.find_phone(value)
+
         if value:
             self.phones.remove(value)
 
@@ -62,6 +67,7 @@ class Record:
         phone_obj = self.find_phone(value)
 
         if phone_obj:
+            # Спочатку додаємо новий номер, потім видаляємо старий
             self.add_phone(replace)
             self.remove_phone(phone_obj)
         else:
@@ -70,16 +76,21 @@ class Record:
             )
 
     def find_phone(self, value: str) -> Optional[Phone]:
-        """Повертає об'єкт Phone або None."""
+        """Повертає об'єкт Phone за номером або None, якщо номер не знайдено."""
         return next((i for i in self.phones if i.value == value), None)
 
     def add_birthday(self, date: str) -> None:
-        """Додає день народження."""
+        """Додає день народження контакту."""
         self.birthday = Birthday(date)
 
     @property
+    def phones_as_string(self) -> str:
+        """Повертає всі телефони контакту одним рядком через кому."""
+        return ', '.join(i.value for i in self.phones)
+
+    @property
     def find_birthday(self) -> str:
-        """Повертає дату народження або повідомлення, якщо її немає."""
+        """Повертає дату народження або викликає помилку, якщо її немає."""
         if self.birthday:
             return self.birthday.value
         else:
@@ -89,6 +100,7 @@ class Record:
         """Рядкове представлення контакту."""
         return (
             f"Contact name: {self.name.value}, "
+            f"Birthday: {self.birthday}, "
             f"phones: {', '.join(i.value for i in self.phones)}"
         )
 
@@ -97,12 +109,15 @@ class AddressBook(UserDict):
     """Колекція контактів (ключ — ім'я, значення — Record)."""
 
     def add_record(self, value: Record) -> None:
+        """Додає Record до телефонної книги."""
         self.data[value.name.value] = value
 
-    def find(self, value: str) -> Optional[Record]:
-        return self.data.get(value)
+    def find(self, value: str) -> Record:
+        """Повертає контакт за ім'ям або викликає KeyError, якщо не знайдено."""
+        return self.data[value]
 
     def delete(self, value: str) -> None:
+        """Видаляє контакт за ім'ям."""
         if value in self.data:
             del self.data[value]
         else:
@@ -114,12 +129,14 @@ class AddressBook(UserDict):
         що припадають на наступні 7 днів.
         """
 
-        def find_next_weekday(start_date, weekday):
+        def find_next_weekday(start_date: datetime.date, weekday: int):
+            """Переносить дату на найближчий вказаний будній день."""
             return start_date + timedelta(
                 (weekday - start_date.weekday()) % 7 or 7
             )
 
         def adjust_for_weekend(birthday):
+            """Якщо дата припадає на вихідний, переносить її на понеділок."""
             weekday = birthday.weekday()
             if weekday >= 5:
                 birthday = find_next_weekday(birthday, 0)
@@ -134,6 +151,7 @@ class AddressBook(UserDict):
                     k.find_birthday, "%d.%m.%Y"
                 ).date()
             except:
+                # Якщо день народження не вказаний або невалідний, контакт пропускаємо
                 continue
 
             birthday_this_year = birthday_date.replace(year=today.year)
@@ -146,10 +164,12 @@ class AddressBook(UserDict):
                         birthday_this_year
                     )
                     upcoming_birthdays.append(str(birthday_this_year))
+
         if upcoming_birthdays:
             return upcoming_birthdays
         else:
             raise AttributeError("No birthdays found")
 
     def __str__(self) -> str:
+        """Повертає всі контакти як багаторядковий рядок."""
         return '\n'.join(str(v) for v in self.data.values())

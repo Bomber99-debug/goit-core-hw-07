@@ -11,7 +11,7 @@ def input_error(func: Callable) -> Callable:
         try:
             return func(*args, **kwargs)
         except ValueError as err:
-            return str(err)  # "Please provide both name and phone."
+            return str(err)  # Повертаємо текст помилки валідації користувачу
         except KeyError as err:
             return f"Contact '{err.args[0]}' not found."
         except IndexError:
@@ -33,18 +33,28 @@ def parse_input(user_input: str) -> Tuple[str, ...]:
     return cmd, *args
 
 
+def validate_args(args: list[str], nums: int) -> list[str]:
+    """Перевіряє точну кількість аргументів для команди."""
+    if len(args) == nums:
+        return args
+    else:
+        raise ValueError("Invalid number of arguments.")
+
+
 @input_error
 def add_contact(args: list[str], contacts: AddressBook) -> str:
     """Додає новий контакт або телефон до існуючого."""
-    name, phone = args
-    record = contacts.find(name)
+    name, phone = validate_args(args, 2)
 
-    if record:
+    try:
+        # Якщо контакт уже існує, пробуємо додати ще один номер
+        record = contacts.find(name)
         record.add_phone(phone)
-        return "Contact update"
-    else:
+        return "Contact updated."
+    except KeyError:
+        # Якщо контакту ще немає, створюємо новий запис
         record = Record(name)
-        record.add_phone(str(phone))
+        record.add_phone(phone)
         contacts.add_record(record)
         return "Contact added."
 
@@ -52,43 +62,34 @@ def add_contact(args: list[str], contacts: AddressBook) -> str:
 @input_error
 def change_contact(args: list[str], contacts: AddressBook) -> str:
     """Змінює існуючий номер телефону."""
-    name, old_phone, new_phone = args
+    name, old_phone, new_phone = validate_args(args, 3)
     record = contacts.find(name)
-
-    if record:
-        record.edit_phone(old_phone, new_phone)
-        return "Contact updated."
-    else:
-        return "The contact is not in the phonebook."
+    record.edit_phone(old_phone, new_phone)
+    return "Contact updated."
 
 
 @input_error
 def show_phone(args: list[str], contacts: AddressBook) -> str:
-    """Показує повну інформацію про контакт."""
+    """Показує тільки телефони контакту."""
     name = args[0]
     record = contacts.find(name)
-
-    if record:
-        return record
-    else:
-        return "Contact not found"
+    return record.phones_as_string
 
 
 @input_error
-def birthday(args: list[str], contacts: AddressBook) -> list[str] | str:
+def birthday(_: list[str], contacts: AddressBook) -> list[str] | str:
     """
     Повертає список дат найближчих днів народження
     (наступні 7 днів).
     """
     birthday_days = contacts.get_upcoming_birthdays()
-
     return birthday_days
 
 
 @input_error
 def add_birthday(args: list[str], contacts: AddressBook) -> str:
     """Додає або оновлює день народження контакту."""
-    name, date = args
+    name, date = validate_args(args, 2)
     record = contacts.find(name)
 
     record.add_birthday(date)
@@ -105,7 +106,7 @@ def show_birthday(args: list[str], contacts: AddressBook) -> str:
 
 
 @input_error
-def show_all(args: list[str], contacts: AddressBook) -> str:
+def show_all(_: list[str], contacts: AddressBook) -> str:
     """Повертає всі записи телефонної книги."""
     return contacts
 
